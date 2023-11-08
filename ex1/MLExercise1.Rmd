@@ -1,0 +1,68 @@
+---
+output:
+  pdf_document
+---
+
+# Intoduction to Machine Learning - Exercise 1
+Mikko Ahro
+
+## Problem 1
+
+### Task a
+
+Read p1.csv into dataframe and drop columns "id", "SMILES", "InChIKey"
+```{r include=TRUE, message=TRUE}
+p1data <- read.csv("data/p1.csv", header=TRUE, sep=",")
+p1data <- subset(p1data, select=-c(id, SMILES, InChIKey))
+```
+
+
+### Task b
+
+```{r}
+p1_subset <- subset(p1data, select=c(pSat_Pa, NumOfConf, ChemPot_kJmol))
+summary(p1_subset)
+```
+
+
+### Task c
+
+```{r}
+ChemPot_kjmol_arr <- p1data$ChemPot_kJmol
+```
+
+### Task d
+```{r}
+par(mfrow=c(1,2))
+hist(log10(p1data$pSat_Pa))
+boxplot(p1data$NumOfConf)
+```
+
+### Task e
+
+```{r}
+scatter_subset <- subset(p1data, select=c(MW, HeatOfVap_kJmol, FreeEnergy_kJmol))
+pairs(scatter_subset)
+
+```
+## Problem 2
+
+### Task a
+
+```{r}
+train_syn_df <- read.csv("data/train_syn.csv", header=TRUE, sep=",")
+valid_syn_df <- read.csv("data/valid_syn.csv", header=TRUE, sep=",")
+test_syn_df <- read.csv("data/test_syn.csv", header=TRUE, sep=",")
+
+
+fit <- lm(formula = y ~ poly(x,1), data=train_syn_df)
+coeff(summary(fit))
+```
+
+
+
+
+# ```{r eval=FALSE}
+# library(rmarkdown)
+# render("MLExercise1.Rmd")
+# ```
