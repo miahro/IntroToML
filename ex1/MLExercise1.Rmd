@@ -1,9 +1,16 @@
 ---
 output:
-  pdf_document
+  pdf_document: default
 ---
 
-# Intoduction to Machine Learning - Exercise 1
+```{r setup, include=FALSE}
+library(knitr)
+library(kableExtra)
+knitr::opts_chunk$set(ECHO=TRUE)
+```
+
+# Introduction to Machine Learning - Exercise 1
+
 Mikko Ahro
 
 ## Problem 1
@@ -11,28 +18,37 @@ Mikko Ahro
 ### Task a
 
 Read p1.csv into dataframe and drop columns "id", "SMILES", "InChIKey"
-```{r include=TRUE, message=TRUE}
+
+```{r task_1a, include=TRUE, message=TRUE}
 p1data <- read.csv("data/p1.csv", header=TRUE, sep=",")
 p1data <- subset(p1data, select=-c(id, SMILES, InChIKey))
 ```
 
-
 ### Task b
 
-```{r}
-p1_subset <- subset(p1data, select=c(pSat_Pa, NumOfConf, ChemPot_kJmol))
-summary(p1_subset)
-```
+Summary statistics for variables "pSat_PA", "NumOfConf" and "ChemPot_kJmol":
 
+```{r task_1b, results='asis', echo=FALSE}
+p1_subset <- subset(p1data, select=c(pSat_Pa, NumOfConf, ChemPot_kJmol))
+subset_summary <- summary(p1_subset)
+kable(subset_summary)
+```
 
 ### Task c
 
-```{r}
+Mean and standard deviation of column 'ChemPot_kJmol' are:
+
+```{r task_1c, results='asis', echo=FALSE}
 ChemPot_kjmol_arr <- p1data$ChemPot_kJmol
+cat("\n")
+print(paste("Mean: ", mean(ChemPot_kjmol_arr)))
+cat("\n")
+print(paste("Standard deviation: ",sd(ChemPot_kjmol_arr)))
 ```
 
 ### Task d
-```{r}
+
+```{r task_1d, include=TRUE}
 par(mfrow=c(1,2))
 hist(log10(p1data$pSat_Pa))
 boxplot(p1data$NumOfConf)
@@ -45,24 +61,144 @@ scatter_subset <- subset(p1data, select=c(MW, HeatOfVap_kJmol, FreeEnergy_kJmol)
 pairs(scatter_subset)
 
 ```
+
 ## Problem 2
 
 ### Task a
 
-```{r}
+```{r task_2a, results='asis', echo=FALSE}
+library(boot)
 train_syn_df <- read.csv("data/train_syn.csv", header=TRUE, sep=",")
 valid_syn_df <- read.csv("data/valid_syn.csv", header=TRUE, sep=",")
 test_syn_df <- read.csv("data/test_syn.csv", header=TRUE, sep=",")
+train_valid_comb_df <- rbind(train_syn_df, valid_syn_df)
+
+make_model <- function(df, degree){
+  fit <- lm(formula = y ~ poly(x,degree), data=df)
+  return(fit)
+}
+
+get_mse <- function(train_df, test_df, degree) {
+  if (degree == 0) {
+    model <- lm(formula = y ~1, data=train_df)
+    predicted <- predict(model, newdata=test_df)
+    #predicted <- rep(mean(train_df$y), nrow(train_df))
+  } else {
+    model <- make_model(train_df, degree)
+    predicted <- predict(model, newdata = test_df)    
+  }
+  mse <- mean((train_syn_df$y - predicted)^2)
+}
+
+get_cv_mse <- function(df, degree){
+  if (degree==0){
+    fit <- glm(y~1, data=df)
+  } else {
+    fit <- glm(y ~ poly(x, degree), data=df)
+  }
+  cv_error <- cv.glm(data=df, glmfit=fit, K = 5)$delta[1]
+  return(cv_error)
+}
 
 
-fit <- lm(formula = y ~ poly(x,1), data=train_syn_df)
-coeff(summary(fit))
+degrees <- 0:8
+train_loss <- sapply(degrees, function(degree) get_mse(train_df=train_syn_df, test_df=train_syn_df, degree))
+validation_loss <- sapply(degrees, function(degree) get_mse(train_df=train_syn_df, test_df=valid_syn_df, degree))
+test_loss <-sapply(degrees, function(degree) get_mse(train_df=train_syn_df, test_df=test_syn_df, degree))
+testtrva_loss <- sapply(degrees, function(degree) get_mse(train_df=train_valid_comb_df, test_df=test_syn_df, degree))
+cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=train_valid_comb_df, degree))
+#cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=test_syn_df, degree))
+
+loss_df <- data.frame(Degree = degrees, Train = train_loss, Validation=validation_loss, Test=test_loss, TestTRVA=testtrva_loss, CV=cv_loss)
+
+kable(loss_df, format="latex")
+```
+
+### Task b
+
+```{r task_2b, results='asis', echo=FALSE}
+train_syn_df <- read.csv("data/train_syn.csv", header=TRUE, sep=",")
+
+make_model <- function(df, degree){
+  if (degree==0) {
+    fit <- lm(formula = y ~ 1, data=df)
+  } else {
+    fit <- lm(formula = y ~ poly(x,degree), data=df)
+  }
+  return(fit)
+}
+
+x_range <- seq(from=-3, to=3, length.out=256)
+plot(train_syn_df$x, train_syn_df$y, pch=19, col="black", xlab="x", ylab="y", main="Fitted Polynomial Curves")
+
+colors <- c("red", "blue", "green", "yellow", "gray", "pink", "white", "white", "pink")
+print(colors[6])
+
+for(degree in c(0,1,2,3,4,8)){
+  model <- make_model(df=train_syn_df, degree=degree)
+  predicted <- predict(model, newdata = data.frame(x=x_range))
+  curve_color <- colors[degree +1]
+  lines(x_range, predicted, col=curve_color)
+}
+legend(legend=c("Degree 0", "Degree 1","Degree 2","Degree 3","Degree 4","Degree 8"), col=colors, lwd=1, xpd=TRUE, x=0.5, y=9)
+
+```
+
+### Task c
+
+```{r task_3c, results='asis', echo=FALSE}
+train_real_df <- read.csv("data/train_real.csv", header=TRUE, sep=",")
+test_real_df <- read.csv("data/test_real.csv", header=TRUE, sep=",")
+
+
+print(names(train_real_df))
+
+get_mse <- function(train, test, model, formula){
+  if (model=="lm"){
+    fit <- lm(formula=formula, data=train)
+    pred <- predict(fit, newdata=test)
+    
+  } else if (model=="dummy"){
+    fit <- lm(formula=Next_Tmax ~ 1,  data=train)
+    pred <- predict(fit, newdata=test)    
+  }
+  
+  mse <- mean((test$Next_Tmax - pred)^2)
+  return(mse)
+}
+
+get_cv_mse <- function(df, model, formula){
+  if (model=="dummy"){
+    fit <- glm(Next_Tmax~1, data=df)
+  } else if (model=="lm") {
+    fit <- glm(formula, data=df)
+  }
+  cv_error <- cv.glm(data=df, glmfit=fit, K = 5)$delta[1]
+  return(cv_error)
+}
+
+formula <- as.formula(paste("Next_Tmax ~", paste(names(train_real_df)[names(train_real_df) != "Next_Tmax"], collapse = " + ")))
+print(formula)
+
+mse_ols_train <- get_mse(train = train_real_df, test=train_real_df, model="lm", formula=formula)
+mse_ols_test <- get_mse(train = train_real_df, test=test_real_df, model="lm", formula=formula)
+mse_ols_cv <- get_cv_mse(df=train_real_df, model="lm", formula=formula)
+
+mse_dummy_train <- get_mse(train = train_real_df, test=train_real_df, model="dummy", formula=formula)
+mse_dummy_test <- get_mse(train = train_real_df, test=test_real_df, model="dummy", formula=formula)
+mse_dummy_cv <- get_cv_mse(df=train_real_df, model="dummy", formula=formula)
+
+ols <- lm(formula=formula, data=train_real_df)
+pred_ols_train <- predict(ols, newdata=train_real_df)
+mse_ols_train2 <- mean((train_real_df$Next_Tmax - pred_ols_train)^2)
+pred_ols_test <- predict (ols, newdata=test_real_df)
+mse_ols_test2<- mean((test_real_df$Next_Tmax - pred_ols_test)^2)
+
+
 ```
 
 
 
-
-# ```{r eval=FALSE}
-# library(rmarkdown)
-# render("MLExercise1.Rmd")
-# ```
+```{r generate_pdf, eval=TRUE}
+library(rmarkdown) 
+```

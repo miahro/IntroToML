@@ -1,3 +1,5 @@
 data/
 *.html
-
+.RData
+*_files/
+.Rhistory
