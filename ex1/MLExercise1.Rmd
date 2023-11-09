@@ -4,6 +4,8 @@ output:
 ---
 
 ```{r setup, include=FALSE}
+setwd("/home/miahro/ml/ex1")
+library(rmarkdown) 
 library(knitr)
 library(kableExtra)
 knitr::opts_chunk$set(ECHO=TRUE)
@@ -107,7 +109,7 @@ validation_loss <- sapply(degrees, function(degree) get_mse(train_df=train_syn_d
 test_loss <-sapply(degrees, function(degree) get_mse(train_df=train_syn_df, test_df=test_syn_df, degree))
 testtrva_loss <- sapply(degrees, function(degree) get_mse(train_df=train_valid_comb_df, test_df=test_syn_df, degree))
 cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=train_valid_comb_df, degree))
-#cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=test_syn_df, degree))
+cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=test_syn_df, degree))
 
 loss_df <- data.frame(Degree = degrees, Train = train_loss, Validation=validation_loss, Test=test_loss, TestTRVA=testtrva_loss, CV=cv_loss)
 
@@ -132,7 +134,7 @@ x_range <- seq(from=-3, to=3, length.out=256)
 plot(train_syn_df$x, train_syn_df$y, pch=19, col="black", xlab="x", ylab="y", main="Fitted Polynomial Curves")
 
 colors <- c("red", "blue", "green", "yellow", "gray", "pink", "white", "white", "pink")
-print(colors[6])
+#print(colors[6])
 
 for(degree in c(0,1,2,3,4,8)){
   model <- make_model(df=train_syn_df, degree=degree)
@@ -144,23 +146,52 @@ legend(legend=c("Degree 0", "Degree 1","Degree 2","Degree 3","Degree 4","Degree 
 
 ```
 
+
+
+
+
+
+
+
 ### Task c
 
-```{r task_3c, results='asis', echo=FALSE}
+```{r task_2c, results='asis', echo=FALSE}
+library(e1071)
+library(caret)
+library(randomForest)
+library(glmnet)
+
 train_real_df <- read.csv("data/train_real.csv", header=TRUE, sep=",")
 test_real_df <- read.csv("data/test_real.csv", header=TRUE, sep=",")
 
 
-print(names(train_real_df))
+#print(names(train_real_df))
 
 get_mse <- function(train, test, model, formula){
   if (model=="lm"){
     fit <- lm(formula=formula, data=train)
     pred <- predict(fit, newdata=test)
-    
   } else if (model=="dummy"){
     fit <- lm(formula=Next_Tmax ~ 1,  data=train)
     pred <- predict(fit, newdata=test)    
+  } else if (model=="svm"){
+    fit <- svm(Next_Tmax ~ ., data=train, kernel="linear", cost=10)
+    #print(summary(fit))
+    pred <- predict(fit, newdata=test)
+  } else if (model=="rf"){
+    fit <- randomForest(Next_Tmax ~., data=train, mtry=6)
+    pred <- predict(fit, newdata=test)
+  } else if (model=="ridge"){
+    x_train <- subset(train, select= -Next_Tmax)
+    y_train <- train$Next_Tmax
+    x_test <- subset(test, select= -Next_Tmax)
+    y_test <- test$Next_Tmax
+    #print("debug print 1")
+    fit <- cv.glmnet(as.matrix(x_train), y_train, alpha=0)
+    lambda <- fit$lambda.min
+    #print(fit)
+    #print(lambda)
+    pred <- predict(fit, s=lambda, newx=as.matrix(x_test))
   }
   
   mse <- mean((test$Next_Tmax - pred)^2)
@@ -172,7 +203,32 @@ get_cv_mse <- function(df, model, formula){
     fit <- glm(Next_Tmax~1, data=df)
   } else if (model=="lm") {
     fit <- glm(formula, data=df)
+  } else if (model=="svm") {
+    #svm_model <- svm(formula=Next_Tmax ~ ., data=df, kernel="linear", cost=10)
+    ctrl <- trainControl(method="cv", number = 10)
+    svm_cv <- train(Next_Tmax ~., data=df, method="svmLinear", trControl = ctrl, metric = "RMSE")
+    MSE <- svm_cv$results$RMSE^2
+    return(MSE)
+  } else if (model=="rf") {
+    #svm_model <- svm(formula=Next_Tmax ~ ., data=df, kernel="linear", cost=10)
+    ctrl <- trainControl(method="cv", number = 10)
+    rf_cv <- train(Next_Tmax ~., data=df, method="rf", trControl = ctrl, tuneGrid=data.frame(.mtry=12), metric = "RMSE")
+    #print(rf_cv)
+    MSE <- rf_cv$results$RMSE^2
+    return(MSE)
+  } else if (model=="ridge") {
+    #svm_model <- svm(formula=Next_Tmax ~ ., data=df, kernel="linear", cost=10)
+    ctrl <- trainControl(method="cv", number = 10)
+    x <- subset(df, select= -Next_Tmax)
+    y <- df$Next_Tmax
+    #print("debug pring from ridge k-fold")
+    ridge_cv <- train(Next_Tmax ~., data=df, method="glmnet", trControl = ctrl)
+    #print(ridge_cv)
+    MSE <- min(ridge_cv$results$RMSE)^2
+    return(MSE)
   }
+  
+  
   cv_error <- cv.glm(data=df, glmfit=fit, K = 5)$delta[1]
   return(cv_error)
 }
@@ -188,17 +244,222 @@ mse_dummy_train <- get_mse(train = train_real_df, test=train_real_df, model="dum
 mse_dummy_test <- get_mse(train = train_real_df, test=test_real_df, model="dummy", formula=formula)
 mse_dummy_cv <- get_cv_mse(df=train_real_df, model="dummy", formula=formula)
 
+mse_svm_train <- get_mse(train = train_real_df, test=train_real_df, model="svm", formula=formula)
+mse_svm_test <- get_mse(train = train_real_df, test=test_real_df, model="svm", formula=formula)
+mse_svm_cv <- get_cv_mse( df = train_real_df, model="svm", formula=formula)
+
+mse_rf_train <- get_mse(train = train_real_df, test=train_real_df, model="rf", formula=formula)
+mse_rf_test <- get_mse(train = train_real_df, test=test_real_df, model="rf", formula=formula)
+mse_rf_cv <- get_cv_mse( df = train_real_df, model="rf", formula=formula)
+
+mse_ridge_train <- get_mse(train = train_real_df, test=train_real_df, model="ridge", formula=formula)
+mse_ridge_test <- get_mse(train = train_real_df, test=test_real_df, model="ridge", formula=formula)
+mse_ridge_cv <- get_cv_mse(df = train_real_df, model="ridge", formula=formula)
+
+
+data <- matrix(c(mse_dummy_train, mse_dummy_test, mse_dummy_cv,
+                 mse_ols_train, mse_ols_test, mse_ols_cv,
+                 mse_rf_train, mse_rf_test, mse_rf_cv, 
+                 mse_svm_train, mse_svm_test, mse_svm_cv,
+                 mse_ridge_train, mse_ridge_test, mse_ridge_cv), nrow=5, ncol=3, byrow=TRUE)
+rownames(data)  <- c("Dummy", "OLS", "RF", "SVR", "Ridge")
+colnames(data) <- c("Train", "Test", "CV")
+
 ols <- lm(formula=formula, data=train_real_df)
-pred_ols_train <- predict(ols, newdata=train_real_df)
-mse_ols_train2 <- mean((train_real_df$Next_Tmax - pred_ols_train)^2)
-pred_ols_test <- predict (ols, newdata=test_real_df)
-mse_ols_test2<- mean((test_real_df$Next_Tmax - pred_ols_test)^2)
+pred_ols_train2 <- predict(ols, newdata=train_real_df)
+mse_ols_train2 <- mean((train_real_df$Next_Tmax - pred_ols_train2)^2)
+pred_ols_test2 <- predict (ols, newdata=test_real_df)
+mse_ols_test2<- mean((test_real_df$Next_Tmax - pred_ols_test2)^2)
 
 
 ```
 
 
 
-```{r generate_pdf, eval=TRUE}
-library(rmarkdown) 
+
+## Problem 3
+
+### Task a
+
+
+
+### Task b
+
+```{r task_3b, results='asis', echo=FALSE}
+
+epsilon <- function(){
+  return(rnorm(n=1, mean=0, sd=0.04))
+}
+
+f <- function(x){
+  result <- 2 - x + x^2 + epsilon()
+  return(result)
+}
+
+
+generate_tset <- function(){
+  x <- runif(10, min=-3, max=1)
+  #print(x)
+  y <- f(x)
+  #print(y)
+  result <- data.frame(x,y)
+  return(result)
+}
+
+pred <- function(train, degree, px){
+  if (degree == 0) {
+    fit <- lm(formula = y ~1, data=train)
+    predicted <- predict(fit, newdata=px)
+  } else {
+    fit <- lm(formula = y ~ poly(x,degree), data=train)
+    predicted <- predict(fit, newdata = px)
+  }
+  return(as.numeric(predicted))
+}
+
+simulate <- function(degree){
+  f0 <- 2
+  y0 <-f(0)
+  train_set <- generate_tset()
+  fhat <- pred(train_set, degree, data.frame(x=0))
+  return(c(f0, y0, fhat))
+}
+
+
+make_sim_df <- function(degree){
+  res_df <- data.frame(f0=numeric(), y0=numeric(), fhat=numeric())
+  for (i in 1:1000){
+    res_vec <- simulate(degree)
+    res_row <- as.data.frame(t(res_vec))
+    colnames(res_row) <- c("f0", "y0", "fhat")
+    res_df <- rbind(res_df, res_row)
+  }
+  return(res_df)
+}
+
+irreducible <- function(df){
+  return(mean((df$y0-df$f0)^2))
+}
+
+biassq <- function(df){
+  (mean(df$fhat)-2)^2
+}
+
+vari <- function(df){
+  Edfhat <- mean(df$fhat)
+  return(mean((df$fhat - Edfhat)^2))
+}
+
+mse <- function(df){
+  return(mean((df$f0-df$fhat)^2))
+}
+
+d0 <- make_sim_df(0)
+d1 <- make_sim_df(1)
+d2 <- make_sim_df(2)
+d3 <- make_sim_df(3)
+d4 <- make_sim_df(4)
+d5 <- make_sim_df(5)
+d6 <- make_sim_df(6)
+
+
+make_row <- function(df, degree){
+  degree <- degree
+  irr <- irreducible(df)
+  bias <- biassq(df)
+  variance <- vari(df)
+  total <- irr + bias + variance
+  mse <- mse(df)
+  
+  return(c(degree, irr,bias, variance, total, mse))
+}
+
+col_names <- c("Degree", "Irreducible", "BiasSq", "Variance", "Total", "MSE")
+
+r0 <- make_row(d0, 0)
+r0 <- as.data.frame(t(r0))
+colnames(r0) <- col_names
+r1 <- make_row(d1, 1)
+r1 <- as.data.frame(t(r1))
+colnames(r1) <- col_names
+r2 <- make_row(d2, 2)
+r2 <- as.data.frame(t(r2))
+colnames(r2) <- col_names
+r3 <- make_row(d3, 3)
+r3 <- as.data.frame(t(r3))
+colnames(r3) <- col_names
+r4 <- make_row(d4, 4)
+r4 <- as.data.frame(t(r4))
+colnames(r4) <- col_names
+r5 <- make_row(d5, 5)
+r5 <- as.data.frame(t(r5))
+colnames(r5) <- col_names
+r6 <- make_row(d6, 6)
+r6 <- as.data.frame(t(r6))
+colnames(r6) <- col_names
+
+result_df <- data.frame(degree=numeric(), irr=numeric(), bias=numeric(), var=numeric(), total=numeric(), mse=numeric())
+colnames(result_df) <- col_names
+result_df <- rbind(result_df, r0)
+result_df <- rbind(result_df, r1)
+result_df <- rbind(result_df, r2)
+result_df <- rbind(result_df, r3)
+result_df <- rbind(result_df, r4)
+result_df <- rbind(result_df, r5)
+result_df <- rbind(result_df, r6)
+
+
+plot(result_df$Degree, result_df$Irreducible, type="l", col="red", xlab="Degree")
+plot(result_df$Degree, result_df$BiasSq, type="l", col="blue", xlab="Degree")
+plot(result_df$Degree, result_df$Variance, type="l", col="green", xlab="Degree")
+plot(result_df$Degree, result_df$MSE, type="l", col="cyan", xlab="Degree")
+
+
+  
+#result_df[nrow(result_df)+1] <- r0
+#result_df[nrow(result_df)+1] <- r1
+#result_df[nrow(result_df)+1] <- r2
+#result_df[nrow(result_df)+1] <- r3
+#result_df[nrow(result_df)+1] <- r4
+#result_df[nrow(result_df)+1] <- r5
+#result_df[nrow(result_df)+1] <- r6
+
+
+
+#z <- generate_tset()
 ```
+
+
+## Problem 4
+
+Not done
+
+
+## Problem 5
+
+### Task a
+
+### Task b
+
+
+### Task c
+
+
+## Problem 6
+
+### Task a
+
+
+### Task b
+
+### Task c
+
+
+
+## Problem 7
+
+### Task a
+
+
+### Task b
+
