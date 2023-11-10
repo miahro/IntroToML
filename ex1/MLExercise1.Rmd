@@ -439,10 +439,93 @@ Not done
 
 ### Task a
 
+
+```{r task_5a, results='asis', echo=FALSE}
+
+d1_df <- read.csv("data/d1.csv", header=TRUE, sep=",")
+d2_df <- read.csv("data/d2.csv", header=TRUE, sep=",")
+d3_df <- read.csv("data/d3.csv", header=TRUE, sep=",")
+d4_df <- read.csv("data/d4.csv", header=TRUE, sep=",")
+
+lm_d1 <- lm(y~x, data=d1_df)
+lm_d2 <- lm(y~x, data=d2_df)
+lm_d3 <- lm(y~x, data=d3_df)
+lm_d4 <- lm(y~x, data=d4_df)
+
+lm_list <- list(lm_d1, lm_d2, lm_d3, lm_d4)
+
+
+intercept <- sapply(lm_list, function(x) summary(x)$coefficients[1, 1:4])
+slope <- sapply(lm_list, function(x) summary(x)$coefficients[2, 1:4])
+rsquared <- sapply(lm_list, function(x) summary(x)$r.squared)
+
+result_table <- data.frame(
+  Data = c("d1", "d2", "d3", "d4"),
+  Intercept = intercept[1, ],
+  Int_SE = intercept[2, ],
+  Int_p_value = intercept[4, ],
+  Slope = slope[1, ],
+  Slope_SE = slope[2, ],
+  Slope_p_value = slope[4, ],
+  R_Squared = rsquared
+)
+
+kable(result_table)
+
+
+
+```
+
+
 ### Task b
 
 
+```{r task_5b, results='asis', echo=FALSE}
+plot(d1_df$x, d1_df$y)
+abline(lm_d1, lwd=3, col="red")
+
+plot(d2_df$x, d2_df$y)
+abline(lm_d2, lwd=3, col="blue")
+
+plot(d3_df$x, d3_df$y)
+abline(lm_d3, lwd=3, col="green")
+
+plot(d4_df$x, d4_df$y)
+abline(lm_d4, lwd=3, col="cyan")
+
+```
+
 ### Task c
+
+Potential problems with regression models:
+
+1. Non-linearity of the response predictor relationship
+2. Correlation of error terms
+3. Non-constant variance of error terms
+4. Outliers
+5. High-leverage points
+6. Collinearity
+
+```{r task_5c1, results='asis', echo=FALSE}
+par(mfrow = c(2,2))
+plot(lm_d1)
+```
+```{r task_5c2, results='asis', echo=FALSE}
+par(mfrow = c(2,2))
+plot(lm_d2)
+```
+
+
+```{r task_5c3, results='asis', echo=FALSE}
+par(mfrow = c(2,2))
+plot(lm_d3)
+```
+
+
+```{r task_5c4, results='asis', echo=FALSE}
+par(mfrow = c(2,2))
+plot(lm_d4)
+```
 
 
 ## Problem 6
