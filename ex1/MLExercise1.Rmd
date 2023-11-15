@@ -9,6 +9,10 @@ library(rmarkdown)
 library(knitr)
 library(kableExtra)
 knitr::opts_chunk$set(ECHO=TRUE)
+library(e1071)
+library(caret)
+library(randomForest)
+library(glmnet)
 ```
 
 # Introduction to Machine Learning - Exercise 1
@@ -19,7 +23,7 @@ Mikko Ahro
 
 ### Task a
 
-Read p1.csv into dataframe and drop columns "id", "SMILES", "InChIKey"
+Read p1.csv into dataframe and drop columns "id", "SMILES", "InChIKey". Columns are dropped with following R commands:
 
 ```{r task_1a, include=TRUE, message=TRUE}
 p1data <- read.csv("data/p1.csv", header=TRUE, sep=",")
@@ -50,23 +54,37 @@ print(paste("Standard deviation: ",sd(ChemPot_kjmol_arr)))
 
 ### Task d
 
-```{r task_1d, include=TRUE}
+```{r task_1d, results='asis', echo=FALSE}
 par(mfrow=c(1,2))
-hist(log10(p1data$pSat_Pa))
-boxplot(p1data$NumOfConf)
+hist(log10(p1data$pSat_Pa), main="Histogram of pSat_Sa", ylab="Frequency", xlab="Log10(pSat_SA)")
+boxplot(p1data$NumOfConf, main="Boxplot of NumOfCont", ylab="Number of stable conformers")
 ```
 
 ### Task e
+Scatterplot of variables "MW" (The molecular weight of the molecule [g/mol]), "HeatOFCap_kJmol" (the heat of
+vaporisation [kJ/mol]), and "FreeEnergy_kJmol" (the free energy of a molecule in mixture [kJ/mol])
 
-```{r}
+```{r, results='asis', echo=FALSE}
 scatter_subset <- subset(p1data, select=c(MW, HeatOfVap_kJmol, FreeEnergy_kJmol))
 pairs(scatter_subset)
 
 ```
+\newpage
 
 ## Problem 2
 
 ### Task a
+
+Polynomial curve:
+$\hat{y} = \sum_{k=0}^{p}w_kx^k$ fitted to synthetic data from files "train_syn.csv" as training data and "valid_syn.csv" as validation data. Results are shown in table below. Explation of table columns and rows:
+
+* Train is the training loss (train model on training set, report error on training set)
+* Validation is the validation loss (train model on training set, report error on validation set)
+* Test is the testing loss (train model on training set, report error on test set)
+* TestTRVA is another testing loss (train model on the combined training and validation data, report
+error on test set)
+* CV is the MSE from 5-fold cross-validation on the combined training and validation data
+
 
 ```{r task_2a, results='asis', echo=FALSE}
 library(boot)
@@ -91,7 +109,6 @@ get_mse <- function(train_df, test_df, degree) {
   }
   mse <- mean((train_syn_df$y - predicted)^2)
 }
-
 get_cv_mse <- function(df, degree){
   if (degree==0){
     fit <- glm(y~1, data=df)
@@ -117,6 +134,9 @@ kable(loss_df, format="latex")
 ```
 
 ### Task b
+
+Training set and fitted polynomial curves for degrees 0,1,2,3,4 and 8 shown in below figure:
+
 
 ```{r task_2b, results='asis', echo=FALSE}
 train_syn_df <- read.csv("data/train_syn.csv", header=TRUE, sep=",")
@@ -150,16 +170,20 @@ legend(legend=c("Degree 0", "Degree 1","Degree 2","Degree 3","Degree 4","Degree 
 
 
 
-
-
-
 ### Task c
+Datasets used are weather data "train_real.csv" for training and "test_real.csv" for testing. 
+
+Next day’s maximum temperature (variable Next_Tmax) is predicted with following models:
+
+* dummy model (see the discussion below)
+* OLS linear regression (simple baseline)
+* random forest (RF)
+* support vector regression (SVR)
+* ridge regression (RR)
+
 
 ```{r task_2c, results='asis', echo=FALSE}
-library(e1071)
-library(caret)
-library(randomForest)
-library(glmnet)
+
 
 train_real_df <- read.csv("data/train_real.csv", header=TRUE, sep=",")
 test_real_df <- read.csv("data/test_real.csv", header=TRUE, sep=",")
@@ -179,7 +203,7 @@ get_mse <- function(train, test, model, formula){
     #print(summary(fit))
     pred <- predict(fit, newdata=test)
   } else if (model=="rf"){
-    fit <- randomForest(Next_Tmax ~., data=train, mtry=6)
+    fit <- randomForest(Next_Tmax ~., data=train, mtry=22)
     pred <- predict(fit, newdata=test)
   } else if (model=="ridge"){
     x_train <- subset(train, select= -Next_Tmax)
@@ -212,7 +236,7 @@ get_cv_mse <- function(df, model, formula){
   } else if (model=="rf") {
     #svm_model <- svm(formula=Next_Tmax ~ ., data=df, kernel="linear", cost=10)
     ctrl <- trainControl(method="cv", number = 10)
-    rf_cv <- train(Next_Tmax ~., data=df, method="rf", trControl = ctrl, tuneGrid=data.frame(.mtry=12), metric = "RMSE")
+    rf_cv <- train(Next_Tmax ~., data=df, method="rf", trControl = ctrl, tuneGrid=data.frame(.mtry=22), metric = "RMSE")
     #print(rf_cv)
     MSE <- rf_cv$results$RMSE^2
     return(MSE)
@@ -234,7 +258,7 @@ get_cv_mse <- function(df, model, formula){
 }
 
 formula <- as.formula(paste("Next_Tmax ~", paste(names(train_real_df)[names(train_real_df) != "Next_Tmax"], collapse = " + ")))
-print(formula)
+#print(formula)
 
 mse_ols_train <- get_mse(train = train_real_df, test=train_real_df, model="lm", formula=formula)
 mse_ols_test <- get_mse(train = train_real_df, test=test_real_df, model="lm", formula=formula)
@@ -262,33 +286,76 @@ data <- matrix(c(mse_dummy_train, mse_dummy_test, mse_dummy_cv,
                  mse_rf_train, mse_rf_test, mse_rf_cv, 
                  mse_svm_train, mse_svm_test, mse_svm_cv,
                  mse_ridge_train, mse_ridge_test, mse_ridge_cv), nrow=5, ncol=3, byrow=TRUE)
-rownames(data)  <- c("Dummy", "OLS", "RF", "SVR", "Ridge")
+rownames(data)  <- c("Dummy", "OLS", "RF", "SVR", "RR")
 colnames(data) <- c("Train", "Test", "CV")
 
-ols <- lm(formula=formula, data=train_real_df)
-pred_ols_train2 <- predict(ols, newdata=train_real_df)
-mse_ols_train2 <- mean((train_real_df$Next_Tmax - pred_ols_train2)^2)
-pred_ols_test2 <- predict (ols, newdata=test_real_df)
-mse_ols_test2<- mean((test_real_df$Next_Tmax - pred_ols_test2)^2)
+kable(data, format="latex")
+#ols <- lm(formula=formula, data=train_real_df)
+#pred_ols_train2 <- predict(ols, newdata=train_real_df)
+#mse_ols_train2 <- mean((train_real_df$Next_Tmax - pred_ols_train2)^2)
+#pred_ols_test2 <- predict (ols, newdata=test_real_df)
+#mse_ols_test2<- mean((test_real_df$Next_Tmax - pred_ols_test2)^2)
 
 
 ```
 
+In the table the columns are:
 
+* "Train": training loss
+* "Test": testing loss
+* "CV": 10-fold cross-validation loss
 
+Answers to the questions:
+
+1. Which regressor is the best? Why?
+
+* Based on this data, Random forest seems to be the best model, because both test and CV losses are smaller than for other models.
+* "Best" is to be taken with caution here: no special attempts to optimize models were made (for example no feature selection or hyperparameter optimization), but models were run with all features included, and single set of hyperparameters. Models should be optimized, and "best" should be selected based on optimization. See point 3. 
+
+2. How does Train compare to Test? How does CV compare to Test?
+
+* Training error is smaller for all models than testing. This is natural, as model is trained with training set. 
+* For all models, CV is lower than test loss, but higher than training loss. This is also as it should be: CV is using only training data, but dividing it into random train and test sets, and repeating process k-times. The purpose of CV is to provide realistic estimate of test error, and for this train/data set for all models works this way. 
+* It is notable that for all other models train, test and CV losses are relatively close to each other, but for RF train error is significantly smaller than for any other model. The reason for this is likely to be built-in feature selection of RF, while all other models were used without feature selection.
+
+3. How can you improve the performance of these regressors (on this training set)?
+
+* Feature selection was not done, but all features were used for all models. Feature selection would likely improve the performance or at least validate that all features is proper selection
+* Random Forest and SVR have hyperparameters that should be optimized. In this case, models were just run with default parameters (SVM with linear kernel). Hyperparameter optimization could improve performance. 
+
+\newpage
 
 ## Problem 3
 
 ### Task a
 
+Typical behaviour of the following terms, as we go from less flexible to more flexible statistical
+learning methods:
 
+* training error and testing error: training error is generally decreasing when flexibility is increasing. This is because more flexibility the model has, easier it is to fit the model to the trainign data. Smamll training error, however, does not necessarily mean good model, as overfit may happen. Test error decreases first when flexibility increases, but at some point the model starts overfitting the training data, and from this point test error inceasees.
+
+As a simple example, if we consider linear data $y=ax + \epsilon$ and we fit linear curve with linear regression, and we fit polynomial curve (degree > 1) with linear regression: polynomial curve has almost automatically smaller trainign error than linear, because polynomial model explains at least some of the noise with polynomial constants for terms higher than one. On the other hand, this is clear overfitting, and test error is likely to be higher with polynomial model than with linear model.
+
+* (squared) bias: bias describes the difference between actual phenomenom modeled and model. Bias in general decreases when flexibility increases. However, at some point bias starts increasing, because too flexible model starts overfitting the model to the noise. 
+
+* variance: variance can be thought to describe the difference between estimates received as result from using different training sets. Generally more flexible methods have higher variance. But on the other hand, if method is too inflexible, it cannot catch the complexity of data, in which case variance is also high. As summary variance decreases first as flexibility increases, but starts increasing when flexibility grows too much. 
+
+* irreducible (or Bayes) error: irreducible error means the inherent error in data due to noise. Because noise is random and inherent property of training and testing data, this is the part of error that cannot be reduced by improving  improving the model. In other words, irreducible error always remains, no matter what is done for the model. Hence, irreducible error doesn't vary according to model flexibility.
 
 ### Task b
+
+Data point $y = f(x) + \epsilon$ where $f(x)=2 -x + x^2$ and $\epsilon \sim Normal(0, 0.04^2)$ and $x \sim Uniform(-3, 3)$. Polynomial regression function $\hat{f}$ is of degree $p$ is trained using a data set D of n data points. 
+
+* 1000 training sets
+* 10 data points in each
+* each training set is fitted to polynomial function of degree 0-8
+* Irreducible, BiasSq, Variance, Total and MSE calculated for each polynomial
 
 ```{r task_3b, results='asis', echo=FALSE}
 
 epsilon <- function(){
   return(rnorm(n=1, mean=0, sd=0.04))
+  
 }
 
 f <- function(x){
@@ -409,10 +476,13 @@ result_df <- rbind(result_df, r5)
 result_df <- rbind(result_df, r6)
 
 
-plot(result_df$Degree, result_df$Irreducible, type="l", col="red", xlab="Degree")
-plot(result_df$Degree, result_df$BiasSq, type="l", col="blue", xlab="Degree")
-plot(result_df$Degree, result_df$Variance, type="l", col="green", xlab="Degree")
-plot(result_df$Degree, result_df$MSE, type="l", col="cyan", xlab="Degree")
+kable(result_df)
+
+par(mfrow=c(2,2))
+plot(result_df$Degree, result_df$Irreducible, type="l", col="red", xlab="Degree", ylab="", main="Irreducible")
+plot(result_df$Degree, result_df$BiasSq, type="l", col="blue", xlab="Degree", ylab="", main="Squared bias")
+plot(result_df$Degree, result_df$Variance, type="l", col="green", xlab="Degree", ylab="", main="Variance")
+plot(result_df$Degree, result_df$MSE, type="l", col="cyan", xlab="Degree", ylab="", main="MSE")
 
 
   
@@ -429,15 +499,31 @@ plot(result_df$Degree, result_df$MSE, type="l", col="cyan", xlab="Degree")
 #z <- generate_tset()
 ```
 
+The error terms roughly behave as described in Task a:
 
+* Irreducible is random without clear pattern, and order of magnitude as expected from $\epsilon$ 
+* Squared bias decreases until degree 2, after which it remains relatively constant
+* Variance clearly decreases until degree 2, after which remains relatively constant. 
+* MSE decreases until degree 2, after which is remains relatively constant. 
+
+For degrees 0-1 Total is almost exactly MSE. For higher degrees, Total is higher than MSE, but the abosolute value and absolute differences are very small. We don't see bias and variance growing when degree is higher than 2, but they remain constant. These behaviors is slightly different from discussion in Task a, but there is quite clear explanation: the training data is 2nd degree polynomial function with very small level of noise added. In the range [-3, 3] the function takes values from 1.75 to 14, while noise is only $\epsilon \sim Normal(0, 0.04^2)$. This means that in practice the fitting is likely to give coefficients for polynomials of x for higher degrees than 2 very close to zero. In other words, the value of function is dominant over noise term, and therefore we don't see increase of bias and variance. 
+
+\newpage
 ## Problem 4
 
 Not done
 
-
+\newpage
 ## Problem 5
 
 ### Task a
+
+Datasets "d1.csv", "d2.csv", "d3.csv", and "d4.csv" each 11 observations of (x,y) pairs are fitted with 1 variable linear regression $\hat{y}= w_0 + w_1x$. The range of data (depending on dataset) is x [3, 19] and y [3.1, 12.74].
+For each following are presented in table below:
+
+* Intercept term estimate, standard error and p-value
+* Slope term estimate, standard error and p-value
+* R-squared value for the model
 
 
 ```{r task_5a, results='asis', echo=FALSE}
@@ -476,29 +562,41 @@ kable(result_table)
 
 ```
 
+For all datasets reported values are almost equal, with positive slope and positive intercept term. 
+
+* p-value is approx 0.002 for each dataset, which can be considered small in indicating statistical significance
+* standard errors are relatively high (approx 35% for intercept and 25% for slope), but still within range indicating that slope and intercept have correct sign and magnitude
+* R-squared values are approx 67%. Interpretation of R-squared valua is highly application dependent, but one could say that 67% indicates that fit works somehow at least. 
+
+Still this is not sufficient to conclude safely that when x increases (or decreases) y increases (or decreases). Standard errors. Linear model can involve multiple problems that are not well described by standard error, p-value and R-squared alone.
+
 
 ### Task b
 
+Each data set and fitted regression line is plot below: 
 
 ```{r task_5b, results='asis', echo=FALSE}
-plot(d1_df$x, d1_df$y)
+par(mfrow = c(2,2))
+
+plot(d1_df$x, d1_df$y, xlab="x", ylab="y", main="dataset d1.csv" )
 abline(lm_d1, lwd=3, col="red")
 
-plot(d2_df$x, d2_df$y)
+plot(d2_df$x, d2_df$y, xlab="x", ylab="y", main="dataset d2.csv")
 abline(lm_d2, lwd=3, col="blue")
 
-plot(d3_df$x, d3_df$y)
+plot(d3_df$x, d3_df$y, xlab="x", ylab="y", main="dataset d3.csv")
 abline(lm_d3, lwd=3, col="green")
 
-plot(d4_df$x, d4_df$y)
+plot(d4_df$x, d4_df$y, xlab="x", ylab="y", main="dataset d4.csv")
 abline(lm_d4, lwd=3, col="cyan")
 
 ```
 
+For each dataset the x-range is similar (approx 4-13 for others, except 8-19 for set d), also y-range is quite similar starting from 3-5 and and ending to 9-13. Fitted model is almost the same for each data set. The sets seem to have roughly raising trend (i.e. y increasing when x is increasing). All datasets vs models, however, have significant deviations from fitted model. 
+
 ### Task c
 
 Potential problems with regression models:
-
 1. Non-linearity of the response predictor relationship
 2. Correlation of error terms
 3. Non-constant variance of error terms
@@ -506,43 +604,172 @@ Potential problems with regression models:
 5. High-leverage points
 6. Collinearity
 
+These potential problems can be investigated by analyzing various diagnostic plots of model. These plots are shown below:
+
 ```{r task_5c1, results='asis', echo=FALSE}
 par(mfrow = c(2,2))
-plot(lm_d1)
+plot(lm_d1, main="dataset d1")
 ```
 ```{r task_5c2, results='asis', echo=FALSE}
 par(mfrow = c(2,2))
-plot(lm_d2)
+plot(lm_d2, main="dataset d2")
 ```
 
 
 ```{r task_5c3, results='asis', echo=FALSE}
 par(mfrow = c(2,2))
-plot(lm_d3)
+plot(lm_d3, main="dataset d3")
 ```
 
 
 ```{r task_5c4, results='asis', echo=FALSE}
 par(mfrow = c(2,2))
-plot(lm_d4)
+plot(lm_d4, main="dataset d4")
 ```
 
+Potential problems analyzed from above diagnostic plots:
+
+1. Non-linearity of the response predictor relationship can be best analyzed from Residuals vs fitted plot. If residuals vs fitted shows clear non-linear pattern, it indicates that there is non-linear relationship the model doesn't catch. 
+
+* dataset d1 does not seem to suffer from non-linear relationship
+* residuals vs fitted plot for dataset d2 shows very clear parabolic pattern, indicating clear non-linearity problem
+* residuals vs fitted plot for dataset d3 is harder to interpret: the residuals are clearly not evenly spread, but there is no non-linear pattern, but linear trend with residuals. The plot indicates that there is something wrong with d3, but the problem is not likely to be non-linear relationship
+* dataset d4 does not seem to suffer from non-linear relationship
+
+2. Correlation of error terms: correlation of error terms is not straightforward to analyze from standard diagnostic plots, but residuals vs fitted gives some indication:
+
+* dataset d1: no pattern in residuals
+* dataset d2: clear parabolic pattern indicating correlation of error terms 
+* dataset d3: no clear pattern in residuals
+* dataset d4: no clear pattern in residuals
+
+
+3. Non-constant variance of error terms can be analyzed from Q-Q Residuals plot and from Scale-Location plot. 
+
+* dataset d1 shows linear Q-Q residuals and approximately horizontal Scale-location line both with quite randomly spread error terms, indicating that there is no major problem
+* dataset d2 shows also fairly linear Q-Q residuals and fairly horizontal scale-location. The error terms are not fully randomly spread, but still there is no clear indication of non-constant variance problem
+* dataset d3: Q-Q is linear, but residuals are not randomly split. Scale-location polot shows raising tail and non-randomly split error terms. This indicates at least some level of non-constant variance problem.
+* dataset d4: Q-Q plot is linear and residuals are fairly random. Scale-location plot has no trend-line at all, which indicates problem with the model, but not necessarily with non-constant variance of error tersm. 
+
+
+4. Outliers are best seen from Residuals vs Leverage plot. 
+
+* for dataset d1 there are no indications of clear outliers
+* for dataset d2 there are clear indications of outliers
+* for dataset d3 one observation is not even plotted, but instead warning is given. This is indication of serious problem. It can clearly be seen from plot of original data set points vs fitted model that point (13, 12.74) is clear outlier.
+* for dataset d4 the plot is straight vertical line, which is not normal. Dataset 4 is easiest to analyze from plot of original dataset points vs fitted model, where one can clearly see that 10 x values are 8, and 1 x value is 19. Point (19, 12.50) is clear outlier
+
+5. High-leverage points are also best seen from Residuals vs Leverage plot.
+
+* for dataset d1 there are no indications of clear high leverage points
+* for dataset d2 there are no clear indications of high leverage points
+* for dataset d3 high-leverage point diagnostic plot is indicating leverange 1 for one point, and from plot of original data set points vs fitted model it can be seen that point (13, 12.74) is clearly high-leverage point. 
+* with similar analysis as for outliers, point (19, 12.50) is clear high leverage point. 
+
+6. Collinearity: in this case, each dataset contains only (x,y) pairs and hence only 1 explanatory variable. Collinearity means collinearity between explanatory variables, and requires minimum 2 explanatory variables to happen. So none of the datasets / models suffer from collinearity. 
+
+As a summary problems suffered by linear models for datasets d1-d4
+
+```{r task_5c3i, results='asis', echo=FALSE}
+
+
+sets = c("d1", "d2", "d3", "d4")
+nl = c("", "Yes", "", "")
+cl = c("", "Yes", "", "")
+nc = c("", "", "Yes", "")
+ol = c("", "", "Yes", "Yes")
+hl = c("", "", "Yes", "Yes")
+col = c("", "", "", "")
+summary_df <- data.frame(sets, nl, cl, nc, ol, hl, col)
+colnames(summary_df) <- c("Dataset", "Non-linearity", "Correlation of error", "Non-constant variance of error", "Outliers", "High-leverage", "Collinearity")
+
+
+kable(t(summary_df))
+```
+
+\newpage
 
 ## Problem 6
 
 ### Task a
 
+For data set d2.csv intercept and slope and their standard errors are calculated with bootstrap method with 1000 bootstrap estimates. These are reported and compared to values obtained by single linear regression in table below: 
+
+```{r task_6a, results='asis', echo=FALSE}
+boot.fn <- function(data, index){
+  return(coef(lm(y~x, data=data, subset=index)))
+}
+
+
+bootresult <- boot(d2_df, boot.fn, 1000)
+
+boot_intercept <- bootresult$t0[1]
+boot_slope <- bootresult$t0[2]
+sd_boot_intercept <- sd(bootresult$t[,1])
+sd_boot_slope <- sd(bootresult$t[,2])
+
+
+row_names <- c("Linear model", "Bootstrap")
+col_names <- c("Intercept", "SE intercept", "Slope", "SE slope")
+int <- c(intercept[,2][1], boot_intercept)
+int_se <- c(intercept[,2][2], sd_boot_intercept)
+slp <-c(slope[,2][1], boot_slope)
+slp_sd <- c(slope[,2][2], sd_boot_slope)
+
+boot_df <- data.frame(int, int_se, slp, slp_sd)
+rownames(boot_df) <- row_names
+colnames(boot_df) <- col_names
+
+kable(boot_df)
+```
+
+Bootstrap standard errors are more reliable. This is because the dataset is very small, only 11 observations, and bootstrap is resampling the dataset with replacement and repeating the process multiple times. Hence the standard errors are calculated from much larger set of fit data than in single linear regression. 
 
 ### Task b
 
+Bootstrap algorightm takes following steps for calculating standard errors for intercept and slope parameters:
+
+1. Algorithm samples 11 datapoints with replacement from original dataset (no subsetting was used), this is bootstrap sample
+2. Bootstrap sample is taken as trainig data for linear regression (1st degree)
+3. Intercept and slope coefficients are saved into table
+4. Steps 1-3 are repeated 1000 times (depending on parameter given to bootstrap function) until the table has 1000 rows
+5. Finally standard error is calculated as standard deviation for intercept column and slope column, respectively
+
+
 ### Task c
 
+In bootstrap, you sample $n$ data points from a population of $n$ points with replacement. Argue that the
+probability that the $j$th observation is not in the bootstrap sample is about 0.368 when $n$ is very large.
 
+For each draw probability of sampling $j$th observation from sample size of $n$ is:
+$$
+P(j) = 1/n
+$$
+Probability of not sampling $j$th observation is complement of this:
+$$
+P(\bar{j}) = 1-P(j) = 1 - \frac{1}{n} 
+$$
+
+Because we are sampling with replacement probability of not sampling $j$th observation is the same at each draw. Also, each draw is independent from other draws, because we are sampling with replacement. Therefore combined probability of $n$ draws is:
+$$
+P(\text{observation j is not included in n draws}) = \left( 1-\frac{1}{n} \right)^n
+$$
+with large n:
+$$
+\lim_{n \rightarrow \infty}\left( 1-\frac{1}{n} \right)^n \approx 0.368
+$$
+
+\newpage
 
 ## Problem 7
 
 ### Task a
 
+x
+
+X
 
 ### Task b
+
+Estimated hours: 32.
 
