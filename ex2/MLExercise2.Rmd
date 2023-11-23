@@ -1,0 +1,91 @@
+---
+output:
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+setwd("/home/miahro/ml/ex2")
+library(rmarkdown) 
+library(knitr)
+library(kableExtra)
+knitr::opts_chunk$set(ECHO=TRUE)
+#library(e1071)
+#library(caret)
+#library(randomForest)
+library(glmnet)
+#library(boot)
+```
+
+# Introduction to Machine Learning - Exercise 2
+
+
+## Problem 8
+
+### Task a
+
+
+```{r task_8a, include=TRUE, message=TRUE}
+
+accuracy <- function (act, pred) {
+  n <- length(act)
+  Ivec <-- -1*as.numeric(act==pred)
+  return(sum(Ivec)/n)
+}
+
+perplexity <- function(probs){
+  n <- length(probs)
+  return(exp(-sum(log(probs))/n))
+}
+
+custom_rounding <- function(number){
+  ifelse(number<0.5, 0, 1)
+}
+
+spam_train <- read.csv("data/spam_train.csv", header=TRUE, sep=",")
+spam_test <- read.csv("data/spam_test.csv", header=TRUE, sep=",")
+
+glm.fits <- glm(SPAM ~ MISSING_FROM + FROM_ADDR_WS + TVD_SPACE_RATIO +
+LOTS_OF_MONEY + T_FILL_THIS_FORM_SHORT, data = spam_train, family=binomial)
+glm(formula = SPAM ~ MISSING_FROM + FROM_ADDR_WS + TVD_SPACE_RATIO +
+LOTS_OF_MONEY + T_FILL_THIS_FORM_SHORT, family=binomial, data = spam_train )
+
+coef(glm.fits)
+summary(glm.fits)$coef
+
+glm.probs_train <- predict(glm.fits, spam_train, type="response")
+glm.class_train <- custom_rounding(glm.probs_train)
+
+glm.probs_test <- predict(glm.fits, spam_test, type="response")
+glm.class_test <- custom_rounding(glm.probs_test)
+
+accuracy(spam_train$SPAM, glm.class_train)
+perplexity(glm.probs_train)
+
+accuracy(spam_test$SPAM, glm.class_test)
+perplexity(glm.probs_test)
+
+```
+
+
+```{r task_8b, include=TRUE, message=TRUE}
+
+
+X_train <- as.matrix(subset(spam_train, select= c(MISSING_FROM, FROM_ADDR_WS, TVD_SPACE_RATIO,
+LOTS_OF_MONEY, T_FILL_THIS_FORM_SHORT)))
+Y_train <- spam_train$SPAM
+
+X_test <- as.matrix(subset(spam_test, select= c(MISSING_FROM, FROM_ADDR_WS, TVD_SPACE_RATIO,
+LOTS_OF_MONEY, T_FILL_THIS_FORM_SHORT)))
+Y_test <- spam_test$SPAM
+
+lasso_model <- cv.glmnet(X_train, Y_train, family=binomial("logit"), alpha=1)
+best_lambda <- lasso_model$lambda.min
+lasso_predictions_train <- predict(lasso_model, s=best_lambda, newx = X_train)
+
+
+```
+
+
+
+
+

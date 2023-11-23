@@ -13,6 +13,7 @@ library(e1071)
 library(caret)
 library(randomForest)
 library(glmnet)
+library(boot)
 ```
 
 # Introduction to Machine Learning - Exercise 1
@@ -87,7 +88,6 @@ error on test set)
 
 
 ```{r task_2a, results='asis', echo=FALSE}
-library(boot)
 train_syn_df <- read.csv("data/train_syn.csv", header=TRUE, sep=",")
 valid_syn_df <- read.csv("data/valid_syn.csv", header=TRUE, sep=",")
 test_syn_df <- read.csv("data/test_syn.csv", header=TRUE, sep=",")
@@ -126,12 +126,14 @@ validation_loss <- sapply(degrees, function(degree) get_mse(train_df=train_syn_d
 test_loss <-sapply(degrees, function(degree) get_mse(train_df=train_syn_df, test_df=test_syn_df, degree))
 testtrva_loss <- sapply(degrees, function(degree) get_mse(train_df=train_valid_comb_df, test_df=test_syn_df, degree))
 cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=train_valid_comb_df, degree))
-cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=test_syn_df, degree))
+#cv_loss <- sapply(degrees, function(degree) get_cv_mse(df=test_syn_df, degree))
 
 loss_df <- data.frame(Degree = degrees, Train = train_loss, Validation=validation_loss, Test=test_loss, TestTRVA=testtrva_loss, CV=cv_loss)
 
 kable(loss_df, format="latex")
 ```
+
+In this case I would choose model with polynomial degree 2 because 5-fold cross-validation has minimum loss here. 
 
 ### Task b
 
@@ -765,9 +767,15 @@ $$
 
 ### Task a
 
-x
+I had some practical experience with some of the machine learning concepts covered in lectures 1-4 such as linear simple and multiple linear regression. I also had rough conceptual understanding of training, validation and testing data. During this block I understood these concepts much deeper, and got some theoretical framework around them, which I didn't have much before. 
 
-X
+Probably the biggest learning outcome was model evaluation and various error types. Training and testing losses as well as k-fold cross-validation were something that I knew superficially, but this block helped to understand what they actually mean. Division of error to irreducible, bias and variance was totally new concept to me, and helped to understand how regression models work. Bootstrap also was new technique for me, and I guess I understand now the principle how it works. 
+
+Ridge regression and Lasso were also new concepts. By now I can understand the basic concept, and how to apply them, but I have difficulties following the formal mathematics behind these models. 
+
+The contents seem quite interesting and probably relevant for other studies as well, but of course it is difficult to say what is relevant in future courses before taking them. 
+
+Feedback to the course: interesting and practical contents, but the workload is really quite high compared to most (or any) other course I've taken so far. I wouldn't say I'm especially slow, normally I need bit less than 27 hours per credit, but in this course the estimated 135 hours is not going be nearly enough.
 
 ### Task b
 
