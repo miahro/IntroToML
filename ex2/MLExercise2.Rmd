@@ -64,6 +64,7 @@ perplexity(glm.probs_train)
 accuracy(spam_test$SPAM, glm.class_test)
 perplexity(glm.probs_test)
 
+
 ```
 
 
@@ -78,11 +79,20 @@ X_test <- as.matrix(subset(spam_test, select= c(MISSING_FROM, FROM_ADDR_WS, TVD_
 LOTS_OF_MONEY, T_FILL_THIS_FORM_SHORT)))
 Y_test <- spam_test$SPAM
 
-lasso_model <- cv.glmnet(X_train, Y_train, family=binomial("logit"), alpha=1)
+lasso_model <- cv.glmnet(X_train, Y_train, family="binomial", alpha=1)
 best_lambda <- lasso_model$lambda.min
-lasso_predictions_train <- predict(lasso_model, s=best_lambda, newx = X_train)
+lasso_predictions_train_probs <- predict(lasso_model, newx = X_train, s=best_lambda, type="response")
+lasso_predictions_train_classes <- custom_rounding(lasso_predictions_train_probs)
+lasso_predictions_test_probs <- predict(lasso_model, newx = X_test, s=best_lambda, type="response")
+lasso_predictions_test_classes <- custom_rounding(lasso_predictions_test_probs)
 
+accuracy(spam_train$SPAM, lasso_predictions_train_classes)
+perplexity(lasso_predictions_train_probs)
 
+accuracy(spam_test$SPAM, lasso_predictions_test_classes)
+perplexity(lasso_predictions_test_probs)
+
+coef(lasso_model)
 ```
 
 
